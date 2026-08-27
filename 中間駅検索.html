@@ -62,10 +62,16 @@
     button:hover {
       background-color: #357ABD;
     }
-    #result-area, #loading-area {
+    #result-area, #loading-area, #error-area {
       display: none;
       margin-top: 20px;
       text-align: center;
+    }
+    #error-area {
+      color: #D8000C;
+      background-color: #FFD2D2;
+      padding: 10px;
+      border-radius: 5px;
     }
     #map {
       width: 100%;
@@ -78,42 +84,56 @@
       justify-content: center;
       color: #777;
     }
+    .highlight-station {
+      color: #4A90E2;
+      font-size: 2rem;
+      display: block;
+      margin: 10px 0;
+    }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h1>📍 中間駅リサーチ</h1>
+  <h1>📍 中間駅リサーチ (PoC)</h1>
   
   <div class="input-group">
     <label for="station-a">駅A（出発地1）</label>
-    <input type="text" id="station-a" placeholder="例：新宿">
+    <input type="text" id="station-a" placeholder="例：新宿駅">
   </div>
   
   <div class="input-group">
     <label for="station-b">駅B（出発地2）</label>
-    <input type="text" id="station-b" placeholder="例：横浜">
+    <input type="text" id="station-b" placeholder="例：東京駅">
   </div>
   
-  <button onclick="searchIntermediateStation()">中間駅を探す</button>
+  <button onclick="searchIntermediateStation()">おすすめの中間駅を探す</button>
 
   <!-- ローディング表示 -->
   <div id="loading-area">
-    <p>最適な中間駅を計算中...</p>
+    <p>候補駅をスコアリング中...<br><small>※APIと通信しているため数秒かかります</small></p>
+  </div>
+
+  <!-- エラー表示エリア -->
+  <div id="error-area">
+    <p id="error-message"></p>
   </div>
 
   <!-- 結果表示エリア -->
   <div id="result-area">
-    <h2>おすすめの中間駅：<span id="result-station" style="color: #4A90E2;">品川</span></h2>
-    <p>駅Aからの移動時間: 約25分<br>駅Bからの移動時間: 約22分</p>
+    <h2>最適なおすすめ中間駅</h2>
+    <strong id="result-station" class="highlight-station"></strong>
+    <p>
+      駅Aからの移動時間(車): <strong id="time-a"></strong><br>
+      駅Bからの移動時間(車): <strong id="time-b"></strong>
+    </p>
     
     <!-- 地図・周辺スポット表示用プレースホルダー -->
-    <div id="map">Google Maps 描画エリア</div>
+    <div id="map">Google Maps 描画エリア (拡張待ち)</div>
   </div>
 </div>
 
 <script>
-  // フロントエンドのダミー処理（非同期通信のモック）
   function searchIntermediateStation() {
     const stationA = document.getElementById('station-a').value;
     const stationB = document.getElementById('station-b').value;
@@ -123,15 +143,35 @@
       return;
     }
 
-    // UI状態の切り替え
+    // UI状態の切り替え（ローディング表示）
     document.getElementById('result-area').style.display = 'none';
+    document.getElementById('error-area').style.display = 'none';
     document.getElementById('loading-area').style.display = 'block';
 
-    // GASバックエンド処理を模したタイムアウト（後ほど google.script.run に置き換え）
-    setTimeout(() => {
-      document.getElementById('loading-area').style.display = 'none';
-      document.getElementById('result-area').style.display = 'block';
-    }, 2000);
+    // GASバックエンド処理（中間駅スコアリング）を呼び出す
+    google.script.run
+      .withSuccessHandler(function(result) {
+        document.getElementById('loading-area').style.display = 'none';
+        
+        if (result.success) {
+          // 成功した場合：結果エリアに最適駅とそれぞれの時間を表示
+          document.getElementById('result-station').innerText = result.bestStation;
+          document.getElementById('time-a').innerText = result.details.timeA_Text;
+          document.getElementById('time-b').innerText = result.details.timeB_Text;
+          document.getElementById('result-area').style.display = 'block';
+        } else {
+          // API側でエラーになった場合：エラーエリアに詳細を表示
+          document.getElementById('error-message').innerText = result.error;
+          document.getElementById('error-area').style.display = 'block';
+        }
+      })
+      .withFailureHandler(function(error) {
+        // 通信自体が失敗した場合
+        document.getElementById('loading-area').style.display = 'none';
+        document.getElementById('error-message').innerText = 'システム通信エラー: ' + error.message;
+        document.getElementById('error-area').style.display = 'block';
+      })
+      .findIntermediateStation(stationA, stationB);
   }
 </script>
 
